@@ -1,5 +1,5 @@
 ---
-title: "ml hw 1"
+title: "ml1"
 output: html_document
 ---
 #Linear Regression and False Discovery Rate
