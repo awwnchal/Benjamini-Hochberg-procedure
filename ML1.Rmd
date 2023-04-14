@@ -1,0 +1,173 @@
+---
+title: "ml hw 1"
+output: html_document
+---
+#Linear Regression and False Discovery Rate
+
+```{r }
+
+#Q1
+set.seed(7638)
+mm = matrix(rnorm(10000*1001,0,1), nrow = 10000)
+
+#Q2
+lnmodel = lm(mm[,1]~ 0 + mm[,-1])
+summary(lnmodel)
+#Q3 Intercept is not required because we are drawing matrix "randomly" from standard normal distribution with mean 0 and std deviation 1. 
+pvals = summary(lnmodel)$coefficients[,4]
+class(pvals)
+hist(pvals)
+#Q4 we observe p values drawn from the same/null distribution is uniformly distributed.
+no_of_sig_var= sum(summary(lnmodel)$coefficients[,4]< 0.01)
+#Q5
+#Since we generated all these variables randomly, we didn't expect any of them to be significant but we found out 5 of them came out to be significant, we know that it is purely by chance because when we set alpha( level of significance) to be 0.01,it indicates 1% risk of concluding things by chance(i.e observing what we shouldn't have observed,we expected. ~10 significant variables)
+#the 5 values that we see as significant are false positives
+
+#Q6
+#We will do BH process to remove them
+pvals = sort(pvals)
+q =0.1
+df = data.frame(pvals)
+df$rank = c(1:1001)
+df$criticalval = q*(df$rank/1001)
+df
+s = subset(df, pvals<=criticalval) 
+#s=0
+#we found 0 values significant when we set FDR <= q(0.1), this is what we had expected after BH procedure, 0 true discoveries as we knew the numbers were randomly generated.
+
+#Q7
+autos <- read.csv("/Users/anchalchaudhary/Desktop/machine learning/Slides/Class 1/autos.csv")
+
+#Converting all the categorical variables to factors
+autos$make<-as.factor(autos$make)
+autos$fuel_type<-as.factor(autos$fuel_type)
+autos$aspiration<-as.factor(autos$aspiration)
+autos$num_of_doors<-as.factor(autos$num_of_doors)
+autos$body_style<-as.factor(autos$body_style)
+autos$drive_wheels<-as.factor(autos$drive_wheels)
+autos$engine_location<-as.factor(autos$engine_location)
+autos$engine_type<-as.factor(autos$engine_type)
+autos$fuel_system<-as.factor(autos$fuel_system)
+autos$num_of_cylinders<-as.factor(autos$num_of_cylinders)
+
+
+# Exploratory data analysis
+nrow(autos)
+#Summary of each variable
+summary(autos)
+levels(autos$make)
+# 21 types of  makes in data set
+
+# distribution of prices
+hist(autos$price,ylim = c(0,100))
+# price of most of the cars within $0 to $10,000. 
+
+##relation between price and make 
+plot(price ~ make, data=autos)
+
+
+plot(price~length, data=autos) 
+#scatterplot shows as the length of a car increases, the price of that car increases.
+plot(price~curb_weight, data=autos) 
+
+
+#variables related to car's engine
+plot(price ~ num_of_cylinders, data=autos)
+#as the number of cylinders increase, the price of a car increases.
+plot(price~horsepower, data=autos) 
+## Again we can clearly see that as the car gets more powerful, its price increases too. 
+plot(price~ highway_mpg , data=autos) 
+# as the MPG goes up, the price increases because cars with bigger more powerful engines has lower mpg.
+plot(price~ city_mpg , data=autos) 
+
+#e num of doors - price relationship.
+plot(price~ num_of_doors , data=autos) 
+#plot shows it does not affect car's price significantly
+
+
+#Q8
+autos_regress <- glm(price ~., data=autos)
+summary(autos_regress)
+summary_autos_regress<-summary(autos_regress)
+
+# pulling out coefficients
+auto_regress_coefficients <- summary_autos_regress[["coefficients"]]
+# Pulling the p-values 
+autos_regress_pvals<-auto_regress_coefficients[,4]
+sum(autos_regress_pvals<0.01)
+# 10 significant variables at 1% aplha.
+sum(autos_regress_pvals<0.05)
+##  19 significant vatiables at 5% alpha
+
+#Q9
+#Why might false discoveries be an issue?
+#We are using a lot of independent variables in our model. Due to problem of multiplicity, probability of type 1 error increases. In simple words, more the number of hypothesis more the probability of false discoveries.We usually set alpha value for one single test. When testing for multiple variables, we expect about alpha*100% of the null tests will come out as statistically significant.
+#probability of at least one false discovery also increases.
+
+#Q10 bh procedure
+fdr <- function(pvals, q, plotit=FALSE){
+  pvals <- pvals[!is.na(pvals)]
+  N <- length(pvals)
+  
+  k <- rank(pvals, ties.method="min")
+  
+  ### Changed this line from max() to length()
+  alpha <- length(pvals[ pvals <= (q*k/N) ])
+  
+  if(plotit){
+    sig <- factor(pvals <= alpha)
+    o <- order(pvals)
+    plot(pvals[o], log="xy", col=c("grey60","red")[sig[o]], pch=20, 
+         ylab="p-values", xlab="tests ordered by p-value", main = paste('FDR =',q))
+    lines(1:N, q*(1:N) / N)
+  }
+  
+  return(alpha)
+}
+
+## Original FDR function
+fdr2 <- function(pvals, q, plotit=FALSE){
+  pvals <- pvals[!is.na(pvals)]
+  N <- length(pvals)
+  
+  k <- rank(pvals, ties.method="min")
+  
+  alpha <- max(pvals[ pvals <= (q*k/N) ])
+  
+  if(plotit){
+    sig <- factor(pvals <= alpha)
+    o <- order(pvals)
+    plot(pvals[o], log="xy", col=c("grey60","red")[sig[o]], pch=20, 
+         ylab="p-values", xlab="tests ordered by p-value", main = paste('FDR =',q))
+    lines(1:N, q*(1:N) / N)
+  }
+  
+  return(alpha)
+}
+autos_true_disc<-fdr(autos_regress_pvals,0.1,plotit=TRUE)
+autos_true_disc
+# We get 13 true discoveries which is more than what we originally found at 1% significance level.
+
+# BH-adjusted alpha value we got as a result of FDR function
+autos_BH_alpha<-fdr2(autos_regress_pvals,0.1,plotit=TRUE)
+autos_BH_alpha
+# new threshold is 0.02292686,we can consider this as our new alpha value. If we were to consider 5% as our significance level originally, we found 19 significant variables.As a result of this BH-procedure we can conclude that only 13 of them were actual true discoveries, and 6 values came out to be false discoveries. 
+
+##these are interpretations for both 1% and 5% significance level thresholds.
+
+
+```
+
+
+
+```{r }
+
+```
+
+
+
+```{r}
+
+```
+
+
